@@ -1,0 +1,603 @@
+--// 150 TP MACRO + INDIVIDUAL DELAYS + AUTO REBIRTH
+--// GitHub-ready single-file version
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local Window = Rayfield:CreateWindow({
+    Name = "150 TP Macro",
+    LoadingTitle = "150 TP Macro",
+    LoadingSubtitle = "Teleport + Rebirth",
+    ConfigurationSaving = {
+        Enabled = false
+    },
+    Discord = {
+        Enabled = false
+    },
+    KeySystem = false
+})
+
+local TP_Tab = Window:CreateTab("Teleport", 4483362458)
+local Delay_Tab = Window:CreateTab("Delays", 4483362458)
+local Macro_Tab = Window:CreateTab("Auto TP", 4483362458)
+local Rebirth_Tab = Window:CreateTab("Rebirth", 4483362458)
+
+local MAX_SLOTS = 150
+local DEFAULT_DELAY = 1
+
+local savedTPs = {}
+local slotDelays = {}
+
+local selectedSlot = 1
+local autoTPRunning = false
+local loopEnabled = false
+
+local autoRebirthRunning = false
+local rebirthDelay = 1
+
+for i = 1, MAX_SLOTS do
+    slotDelays[i] = DEFAULT_DELAY
+end
+
+local function getRoot()
+    local character = LocalPlayer.Character
+    if not character then
+        return nil
+    end
+
+    return character:FindFirstChild("HumanoidRootPart")
+end
+
+local slotOptions = {}
+
+for i = 1, MAX_SLOTS do
+    slotOptions[i] = "TP Slot " .. i
+end
+
+local function getSlotNumber(option)
+    if type(option) == "table" then
+        option = option[1]
+    end
+
+    if not option then
+        return nil
+    end
+
+    return tonumber(string.match(tostring(option), "%d+"))
+end
+
+--==================================================
+-- TELEPORT
+--==================================================
+
+TP_Tab:CreateSection("Teleport Slots")
+
+local TPStatus = TP_Tab:CreateLabel("Selected Slot: 1 | EMPTY")
+
+local function updateTPStatus()
+    local saved = savedTPs[selectedSlot]
+
+    if saved then
+        local p = saved.Position
+
+        TPStatus:Set(
+            "Slot "
+            .. selectedSlot
+            .. " | SAVED | "
+            .. math.floor(p.X)
+            .. ", "
+            .. math.floor(p.Y)
+            .. ", "
+            .. math.floor(p.Z)
+        )
+    else
+        TPStatus:Set(
+            "Slot "
+            .. selectedSlot
+            .. " | EMPTY"
+        )
+    end
+end
+
+TP_Tab:CreateDropdown({
+    Name = "Select TP Slot",
+    Options = slotOptions,
+    CurrentOption = {"TP Slot 1"},
+    MultipleOptions = false,
+
+    Callback = function(option)
+        local slot = getSlotNumber(option)
+
+        if slot then
+            selectedSlot = slot
+            updateTPStatus()
+        end
+    end
+})
+
+TP_Tab:CreateButton({
+    Name = "Save Current Position",
+
+    Callback = function()
+        local root = getRoot()
+
+        if not root then
+            Rayfield:Notify({
+                Title = "Save TP",
+                Content = "HumanoidRootPart not found.",
+                Duration = 3
+            })
+            return
+        end
+
+        savedTPs[selectedSlot] = root.CFrame
+        updateTPStatus()
+
+        Rayfield:Notify({
+            Title = "TP Saved",
+            Content = "Saved Slot " .. selectedSlot,
+            Duration = 2
+        })
+    end
+})
+
+TP_Tab:CreateButton({
+    Name = "Teleport To Selected",
+
+    Callback = function()
+        local target = savedTPs[selectedSlot]
+
+        if not target then
+            Rayfield:Notify({
+                Title = "Teleport",
+                Content = "Slot " .. selectedSlot .. " is empty.",
+                Duration = 2
+            })
+            return
+        end
+
+        local root = getRoot()
+
+        if root then
+            root.CFrame = target
+        end
+    end
+})
+
+TP_Tab:CreateButton({
+    Name = "Clear Selected Slot",
+
+    Callback = function()
+        savedTPs[selectedSlot] = nil
+        updateTPStatus()
+
+        Rayfield:Notify({
+            Title = "TP Slot",
+            Content = "Cleared Slot " .. selectedSlot,
+            Duration = 2
+        })
+    end
+})
+
+TP_Tab:CreateButton({
+    Name = "Clear All 150 Slots",
+
+    Callback = function()
+        table.clear(savedTPs)
+        updateTPStatus()
+
+        Rayfield:Notify({
+            Title = "TP Slots",
+            Content = "All 150 slots cleared.",
+            Duration = 3
+        })
+    end
+})
+
+TP_Tab:CreateSection("Information")
+
+TP_Tab:CreateLabel("Slots available: 1 - 150")
+TP_Tab:CreateLabel("Auto TP runs from 1 to 150.")
+TP_Tab:CreateLabel("Empty slots are automatically skipped.")
+
+--==================================================
+-- INDIVIDUAL DELAYS
+--==================================================
+
+Delay_Tab:CreateSection("Individual Slot Delay")
+
+local DelayStatus = Delay_Tab:CreateLabel(
+    "Slot 1 Delay: 1.00 seconds"
+)
+
+local DelaySlider
+
+Delay_Tab:CreateDropdown({
+    Name = "Select Slot For Delay",
+    Options = slotOptions,
+    CurrentOption = {"TP Slot 1"},
+    MultipleOptions = false,
+
+    Callback = function(option)
+        local slot = getSlotNumber(option)
+
+        if not slot then
+            return
+        end
+
+        selectedSlot = slot
+
+        local currentDelay = slotDelays[slot] or DEFAULT_DELAY
+
+        DelayStatus:Set(
+            "Slot "
+            .. slot
+            .. " Delay: "
+            .. string.format("%.2f", currentDelay)
+            .. " seconds"
+        )
+
+        if DelaySlider then
+            DelaySlider:Set(currentDelay)
+        end
+    end
+})
+
+DelaySlider = Delay_Tab:CreateSlider({
+    Name = "Selected Slot Delay",
+    Range = {0.01, 30},
+    Increment = 0.01,
+    Suffix = " sec",
+    CurrentValue = DEFAULT_DELAY,
+
+    Callback = function(value)
+        slotDelays[selectedSlot] = value
+
+        DelayStatus:Set(
+            "Slot "
+            .. selectedSlot
+            .. " Delay: "
+            .. string.format("%.2f", value)
+            .. " seconds"
+        )
+    end
+})
+
+Delay_Tab:CreateSlider({
+    Name = "Set All Slot Delays",
+    Range = {0.01, 30},
+    Increment = 0.01,
+    Suffix = " sec",
+    CurrentValue = DEFAULT_DELAY,
+
+    Callback = function(value)
+        for i = 1, MAX_SLOTS do
+            slotDelays[i] = value
+        end
+
+        DelayStatus:Set(
+            "All slots: "
+            .. string.format("%.2f", value)
+            .. " seconds"
+        )
+
+        if DelaySlider then
+            DelaySlider:Set(value)
+        end
+    end
+})
+
+Delay_Tab:CreateButton({
+    Name = "Reset All Delays",
+
+    Callback = function()
+        for i = 1, MAX_SLOTS do
+            slotDelays[i] = DEFAULT_DELAY
+        end
+
+        DelayStatus:Set("All slots reset to 1.00 seconds")
+
+        if DelaySlider then
+            DelaySlider:Set(DEFAULT_DELAY)
+        end
+
+        Rayfield:Notify({
+            Title = "Delays",
+            Content = "All 150 delays reset to 1 second.",
+            Duration = 2
+        })
+    end
+})
+
+--==================================================
+-- AUTO TP
+--==================================================
+
+Macro_Tab:CreateSection("Auto Teleport")
+
+local MacroStatus = Macro_Tab:CreateLabel(
+    "Auto TP: STOPPED"
+)
+
+Macro_Tab:CreateToggle({
+    Name = "Loop 1 - 150",
+    CurrentValue = false,
+
+    Callback = function(value)
+        loopEnabled = value
+    end
+})
+
+local function hasSavedTP()
+    for i = 1, MAX_SLOTS do
+        if savedTPs[i] then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function startAutoTP()
+    if autoTPRunning then
+        return
+    end
+
+    if not hasSavedTP() then
+        Rayfield:Notify({
+            Title = "Auto TP",
+            Content = "Save at least one TP position first.",
+            Duration = 3
+        })
+        return
+    end
+
+    autoTPRunning = true
+
+    task.spawn(function()
+        while autoTPRunning do
+
+            local foundAny = false
+
+            for slot = 1, MAX_SLOTS do
+
+                if not autoTPRunning then
+                    break
+                end
+
+                local target = savedTPs[slot]
+
+                if target then
+
+                    foundAny = true
+
+                    local root = getRoot()
+
+                    if root then
+                        root.CFrame = target
+                    end
+
+                    local delay = slotDelays[slot] or DEFAULT_DELAY
+
+                    MacroStatus:Set(
+                        "Auto TP: Slot "
+                        .. slot
+                        .. "/"
+                        .. MAX_SLOTS
+                        .. " | Delay: "
+                        .. string.format("%.2f", delay)
+                        .. "s"
+                    )
+
+                    task.wait(delay)
+                end
+            end
+
+            if not loopEnabled then
+                break
+            end
+
+            if not foundAny then
+                break
+            end
+
+            task.wait(0.05)
+        end
+
+        autoTPRunning = false
+        MacroStatus:Set("Auto TP: STOPPED")
+    end)
+end
+
+Macro_Tab:CreateToggle({
+    Name = "Auto TP",
+    CurrentValue = false,
+
+    Callback = function(value)
+        if value then
+            startAutoTP()
+        else
+            autoTPRunning = false
+            MacroStatus:Set("Auto TP: STOPPED")
+        end
+    end
+})
+
+Macro_Tab:CreateButton({
+    Name = "Stop Auto TP",
+
+    Callback = function()
+        autoTPRunning = false
+        MacroStatus:Set("Auto TP: STOPPED")
+    end
+})
+
+Macro_Tab:CreateSection("Information")
+
+Macro_Tab:CreateLabel("Order: 1 -> 2 -> 3 -> ... -> 150")
+Macro_Tab:CreateLabel("Each slot uses its own delay.")
+Macro_Tab:CreateLabel("Empty slots are skipped.")
+
+--==================================================
+-- REBIRTH
+--==================================================
+
+Rebirth_Tab:CreateSection("Rebirth")
+
+local RebirthStatus = Rebirth_Tab:CreateLabel(
+    "Auto Rebirth: STOPPED"
+)
+
+local function getRebirthEvent()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+
+    if not remotes then
+        return nil
+    end
+
+    local event = remotes:FindFirstChild("Rebirth")
+
+    if event and event:IsA("RemoteEvent") then
+        return event
+    end
+
+    return nil
+end
+
+local function fireRebirth()
+    local event = getRebirthEvent()
+
+    if not event then
+        RebirthStatus:Set("Rebirth: RemoteEvent not found")
+        return false
+    end
+
+    event:FireServer()
+    return true
+end
+
+Rebirth_Tab:CreateButton({
+    Name = "Rebirth Once",
+
+    Callback = function()
+        if fireRebirth() then
+            Rayfield:Notify({
+                Title = "Rebirth",
+                Content = "Rebirth fired.",
+                Duration = 1.5
+            })
+        else
+            Rayfield:Notify({
+                Title = "Rebirth",
+                Content = "ReplicatedStorage.Remotes.Rebirth was not found.",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Rebirth_Tab:CreateSection("Auto Rebirth")
+
+local RebirthDelayLabel = Rebirth_Tab:CreateLabel(
+    "Delay: 1.00 seconds"
+)
+
+Rebirth_Tab:CreateSlider({
+    Name = "Rebirth Delay",
+    Range = {0.1, 60},
+    Increment = 0.1,
+    Suffix = " sec",
+    CurrentValue = 1,
+
+    Callback = function(value)
+        rebirthDelay = value
+
+        RebirthDelayLabel:Set(
+            "Delay: "
+            .. string.format("%.2f", value)
+            .. " seconds"
+        )
+    end
+})
+
+local function startAutoRebirth()
+    if autoRebirthRunning then
+        return
+    end
+
+    if not getRebirthEvent() then
+        Rayfield:Notify({
+            Title = "Auto Rebirth",
+            Content = "Rebirth RemoteEvent was not found.",
+            Duration = 3
+        })
+        return
+    end
+
+    autoRebirthRunning = true
+
+    task.spawn(function()
+        while autoRebirthRunning do
+
+            local success = fireRebirth()
+
+            if success then
+                RebirthStatus:Set(
+                    "Auto Rebirth: RUNNING | Next: "
+                    .. string.format("%.2f", rebirthDelay)
+                    .. "s"
+                )
+            end
+
+            task.wait(rebirthDelay)
+        end
+
+        RebirthStatus:Set("Auto Rebirth: STOPPED")
+    end)
+end
+
+Rebirth_Tab:CreateToggle({
+    Name = "Auto Rebirth",
+    CurrentValue = false,
+
+    Callback = function(value)
+        if value then
+            startAutoRebirth()
+        else
+            autoRebirthRunning = false
+            RebirthStatus:Set("Auto Rebirth: STOPPED")
+        end
+    end
+})
+
+Rebirth_Tab:CreateButton({
+    Name = "Stop Auto Rebirth",
+
+    Callback = function()
+        autoRebirthRunning = false
+        RebirthStatus:Set("Auto Rebirth: STOPPED")
+    end
+})
+
+Rebirth_Tab:CreateSection("Information")
+
+Rebirth_Tab:CreateLabel(
+    "Remote: ReplicatedStorage.Remotes.Rebirth"
+)
+
+Rebirth_Tab:CreateLabel(
+    "Auto Rebirth fires the RemoteEvent repeatedly."
+)
+
+--==================================================
+-- LOADED
+--==================================================
+
+Rayfield:Notify({
+    Title = "150 TP Macro",
+    Content = "Loaded successfully.",
+    Duration = 3
+})
